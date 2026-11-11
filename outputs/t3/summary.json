@@ -1,0 +1,90 @@
+{
+  "scope_matches": 774,
+  "scope_balls": 184940,
+  "years": [
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "model_choice": {
+    "1": "logit",
+    "2": "logit"
+  },
+  "heldout": [
+    {
+      "model": "logit",
+      "innings": 1,
+      "log_loss": 0.6257688943908871,
+      "brier": 0.21797650179560413,
+      "log_loss_base": 0.6941158963334059
+    },
+    {
+      "model": "spline_logit",
+      "innings": 1,
+      "log_loss": 0.6280013050545119,
+      "brier": 0.21774810090686508,
+      "log_loss_base": 0.6941158963334059
+    },
+    {
+      "model": "hgb",
+      "innings": 1,
+      "log_loss": 0.6425266877636578,
+      "brier": 0.22051529717907012,
+      "log_loss_base": 0.6941158963334059
+    },
+    {
+      "model": "logit",
+      "innings": 2,
+      "log_loss": 0.3972320442118826,
+      "brier": 0.1293897469060728,
+      "log_loss_base": 0.6934391817429376
+    },
+    {
+      "model": "spline_logit",
+      "innings": 2,
+      "log_loss": 0.4068661643297321,
+      "brier": 0.13202257710680615,
+      "log_loss_base": 0.6934391817429376
+    },
+    {
+      "model": "hgb",
+      "innings": 2,
+      "log_loss": 0.42164831631582267,
+      "brier": 0.13453735639100955,
+      "log_loss_base": 0.6934391817429376
+    }
+  ],
+  "ece": {
+    "1": 0.02054283170833334,
+    "2": 0.009757839572145217
+  },
+  "high_pressure_threshold_pct": 0.8,
+  "rule_agreement": [
+    {
+      "fmt": "IPL",
+      "innings": 1,
+      "spearman": -0.3,
+      "top20_overlap": 0.125
+    },
+    {
+      "fmt": "IPL",
+      "innings": 2,
+      "spearman": 0.163,
+      "top20_overlap": 0.427
+    },
+    {
+      "fmt": "T20I",
+      "innings": 1,
+      "spearman": -0.221,
+      "top20_overlap": 0.109
+    },
+    {
+      "fmt": "T20I",
+      "innings": 2,
+      "spearman": 0.073,
+      "top20_overlap": 0.338
+    }
+  ]
+}

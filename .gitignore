@@ -1,0 +1,13 @@
+data/processed/
+node_modules/
+dashboard/dist/
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+!.env.example
+.vercel/
+.DS_Store
+Thumbs.db
+6af3166e7b922_data_pack/
