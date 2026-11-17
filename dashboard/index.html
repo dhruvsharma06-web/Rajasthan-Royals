@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pressure Ratings · SupeRR Selector S2</title>
+<meta name="description" content="Who performs best when the match is on the line: pressure ratings for IPL and T20I batters and bowlers, 2022-2026.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Rajasthan Royals · SupeRR Selector Season 2 · Round 1</p>
+    <h1>Who delivers when the match is on the line?</h1>
+    <p class="lede">Pressure ratings for IPL and T20I batters and bowlers, built from <span id="k-balls"></span> deliveries
+      across <span id="k-matches"></span> matches (<span id="k-years"></span>). A ball is <em>high pressure</em> when the
+      result of the match is most sensitive to what happens on it.</p>
+    <div class="kpis" id="kpis"></div>
+  </div>
+</header>
+
+<nav class="bar" aria-label="Sections">
+  <div class="wrap bar-inner">
+    <div class="seg" role="tablist" aria-label="Role">
+      <button role="tab" data-role="batters" aria-selected="true">Batters</button>
+      <button role="tab" data-role="bowlers" aria-selected="false">Bowlers</button>
+    </div>
+    <div class="links">
+      <a href="#top10">Top 10</a><a href="#players">All players</a><a href="#pressure">Pressure</a>
+      <a href="#clutch">Clutch test</a><a href="#robust">Robustness</a><a href="#method">Method</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section id="top10">
+    <div class="sec-head">
+      <h2>The top 10 <span class="role-name"></span></h2>
+      <p>Ranked on a cautious estimate: the 20th percentile of each player's rating, so a short hot streak
+        cannot outrank a long reliable record. Select a player to see the evidence.</p>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="legend" id="rate-legend"></div>
+        <div id="rate-chart" class="chart"></div>
+        <p class="note">Rating 0 = the average player in the same situations. +0.10 means that, per ball, the player
+          moved the win probability in their team's favour by 10% of what was at stake, more than an average player
+          would have.</p>
+      </div>
+      <div class="card" id="detail" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section id="players">
+    <div class="sec-head">
+      <h2>All eligible <span class="role-name"></span></h2>
+      <p id="elig-note"></p>
+    </div>
+    <div class="card">
+      <div class="table-tools">
+        <input id="search" type="search" placeholder="Search a player" aria-label="Search a player">
+        <span id="count" class="muted"></span>
+      </div>
+      <div class="scroll"><table id="ptable" class="data"></table></div>
+    </div>
+  </section>
+
+  <section id="pressure">
+    <div class="sec-head">
+      <h2>Where pressure sits</h2>
+      <p>Share of balls that are high pressure, by over and wickets down. Chase pressure builds in a close finish;
+        first-innings pressure sits in early collapses, because an early wicket costs the most projected runs.</p>
+    </div>
+    <div class="grid-2">
+      <div class="card"><h3>First innings</h3><div id="heat-1" class="chart"></div></div>
+      <div class="card"><h3>Chase</h3><div id="heat-2" class="chart"></div></div>
+    </div>
+    <div class="heat-scale" id="heat-scale"></div>
+
+    <div class="grid-2 mt">
+      <div class="card">
+        <h3>High-pressure balls move the match more</h3>
+        <p class="sub">Mean change in win probability per ball</p>
+        <div class="legend" id="swing-legend"></div>
+        <div id="swing-chart" class="chart"></div>
+      </div>
+      <div class="card">
+        <h3>Pressure is not the same as difficulty</h3>
+        <p class="sub">Share of flagged balls that come from matches already decided (win probability below 5% or above 95%)</p>
+        <div id="decided-chart" class="chart"></div>
+        <p class="note">A rule-based "difficulty" index (required-rate gap, wickets lost, lateness) flags dead matches
+          more often than chance. The stakes definition almost never does.</p>
+      </div>
+    </div>
+    <div class="card mt">
+      <h3>The win-probability model is calibrated</h3>
+      <p class="sub">Held-out seasons: predicted vs observed win rate, by tenth of predicted probability</p>
+      <div class="legend" id="cal-legend"></div>
+      <div id="cal-chart" class="chart"></div>
+      <p class="note" id="cal-note"></p>
+    </div>
+  </section>
+
+  <section id="clutch">
+    <div class="sec-head">
+      <h2>Is "clutch" a repeatable skill?</h2>
+      <p>Each player's numbers in odd-numbered matches are compared with their even-numbered matches. A real skill
+        shows up in both halves. Performance level repeats; extra lift under pressure does not.</p>
+    </div>
+    <div class="card">
+      <div class="legend" id="sh-legend"></div>
+      <div id="sh-chart" class="chart"></div>
+      <p class="note" id="sh-note"></p>
+    </div>
+  </section>
+
+  <section id="robust">
+    <div class="sec-head">
+      <h2>Robustness: <span class="role-name"></span> under 15 alternative methods</h2>
+      <p>Rank of the current top 15 under each variant. Filled cells are top 10; a dash means not eligible in
+        that variant.</p>
+    </div>
+    <div class="card"><div class="scroll"><table id="rtable" class="data rob"></table></div></div>
+  </section>
+
+  <section id="method">
+    <div class="sec-head"><h2>Method in brief</h2></div>
+    <div class="grid-3">
+      <div class="card"><h3>1 · Pressure = stakes</h3><p>A win-probability model (logistic regression on
+        Duckworth-Lewis-style features, fitted leaving each season out) gives every ball its stakes: the expected
+        swing in win probability over the usual mix of outcomes. The top 20% within format and innings are high
+        pressure.</p></div>
+      <div class="card"><h3>2 · Credit vs the same situation</h3><p>Each ball's change in win probability is
+        credited to the batter and bowler, then compared with the average player in the same format, season,
+        innings, phase and wickets-down band. Run-outs charge the dismissed batter, never the bowler.</p></div>
+      <div class="card"><h3>3 · Cautious ranking</h3><p>Pressure balls measure pressure performance directly;
+        ordinary balls help only as far as clutch differences cannot distort them. Estimates are shrunk toward the
+        average (empirical Bayes) and ranked on the 20th percentile of 1,000 match bootstraps.</p></div>
+    </div>
+    <p class="foot">Only the supplied data pack is used. Two A-team tournaments, rain-revised matches and 11 chases
+      whose ball data disagreed with the official margin are excluded. Full method, evidence and limitations are in
+      the methodology report. Code and outputs: <a id="repo-link" href="#"></a>.</p>
+  </section>
+</main>
+
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
