@@ -74,7 +74,9 @@ Source of requirements: `6af3166e7b922_data_pack/Round 1 Problem Statement _ Sup
   largest clutch spread the split-half test cannot rule out (90% bound, by simulation). This gives pressure balls
   as much weight as the data allows (on average 55% of a batter's own-data weight, 41% of a bowler's). Ranked on the
   20th percentile of posterior draws. Supersedes the all-balls rating of D7, which is kept as a variant.
-- **D4 Stack:** Python + polars for analysis; static Vite/React dashboard reading exported JSON; no backend.
+- **D4 Stack:** Python + polars for analysis; static dashboard (plain HTML/CSS/JS, inline SVG charts, no build step)
+  reading `dashboard/data.js` exported from the outputs; no backend. Changed from Vite/React on 17 Nov: no Node
+  toolchain on the build machine, and a no-build site cannot break on Vercel.
 
 ## Method v2 (revised 11 Nov 2026; as built, superseded where decisions D5-D8 differ)
 Weaknesses found in v1 and the fix for each:
@@ -135,9 +137,11 @@ Rules the remaining tasks must follow:
 | T4 | Credit split, same-situation baseline, shrinkage | R1, R3, R6 | VERIFIED 11 Nov | `python -P pipeline/ratings.py` prints OK |
 | T5 | Bootstrap ranking, clutch-repeatability test, robustness table, provisional top 10s | R4, R6, R8 | VERIFIED 11 Nov | `outputs/ratings/` |
 | T5b | Independent method review and fixes | R6 | VERIFIED 11 Nov | review section above |
-| T6 | Dashboard reading exported JSON | extra | PAUSED (usage budget) | — |
-| T7 | Methodology report (DOCX), generated from outputs | R5, R6, R7 | DRAFT 11 Nov | `python -P pipeline/report.py` -> outputs/report/ |
-| T8 | Clean-run reproduction, name check vs dropdowns, owner deploys | R4, R5, R7 | BLOCKED on T7 (17 Nov) | — |
+| T6 | Dashboard reading exported data | extra | VERIFIED 17 Nov | `python -P pipeline/export_dashboard.py`; dashboard/ checked in headless Chromium (desktop, 400px, dark) |
+| T7 | Methodology report (DOCX), generated from outputs | R5, R6, R7 | VERIFIED 17 Nov | `python -P pipeline/report.py`; proofread from rendered PDF |
+| T7b | Presentation (PPTX, 13 slides), generated from outputs | extra | VERIFIED 17 Nov | `python -P pipeline/slides.py`; checked from rendered PDF |
+| T7c | Lists identical across CSV, report, deck, dashboard | R4, R5 | VERIFIED 17 Nov | `python -P pipeline/check_outputs.py` prints OK |
+| T8 | Clean-run reproduction (needs data pack), name check vs dropdowns, owner deploys | R4, R5, R7 | OPEN | — |
 | — | Buffer; submit early | — | 18 Nov | — |
 
 ## T3 results (11 Nov 2026, held-out seasons, 774 matches / 184,940 balls; excludes A-team, rain-affected and flagged matches)
@@ -197,3 +201,14 @@ Russell, Sikandar Raza; Santner, Axar Patel, Bumrah.
   owner proofreads the report, clean re-run of all four scripts, name check against the Unstop dropdowns,
   owner deploys the dashboard to Vercel, add the dashboard link to the report.
 - Owner preference: Haiku subagents for small tasks and reviews.
+
+## Status (17 Nov 2026) — resume here
+- Project moved to Linux (`~/Documents/rajasthan royals`); OneDrive/Windows notes above (F13, dashboard path) no longer apply.
+- Report, deck and dashboard now build from committed outputs only; `report.py` no longer reads the parquet
+  (pressure map from `outputs/t3/pressure_grid.csv`; 39% / swing ratios computed, not hard-coded).
+- Report fixes 17 Nov: chart axis said "0 = average eligible player" (eligible mean is ~0.02; 0 is the average player
+  in the same situation); README said 12 robustness variants (there are 15); limitations now name the two fragile
+  picks (Nawaz 6/13, Mohsin Khan 2/14) and explain rank vs P(top 10) disagreement; gender-neutral wording.
+- Not done: clean re-run of steps 1-3 (data pack not on this machine); name check against the Unstop dropdowns
+  (check "Namboori Tilak Varma" especially); Vercel deploy; then re-run report.py and slides.py with DASHBOARD_URL.
+- Nothing committed or pushed.

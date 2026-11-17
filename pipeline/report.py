@@ -1,6 +1,6 @@
 """T7: methodology report (DOCX) built only from pipeline outputs, so the report cannot drift from the lists.
 
-Input : outputs/t3/*, outputs/ratings/*, data/processed/ball_pressure.parquet
+Input : outputs/t3/*, outputs/ratings/* (committed outputs only; the data pack is not needed)
 Output: outputs/report/SupeRR_Selector_Methodology.docx and outputs/report/fig_*.png
 Run from the project root after ratings.py:  python -P pipeline/report.py
 """
@@ -26,17 +26,31 @@ dec = pl.read_csv(T3 + "decided_share.csv").row(0, named=True)
 top = {r: pl.read_csv(RT + f"top10_{r}.csv").sort("rank") for r in ("batters", "bowlers")}
 allp = {r: pl.read_csv(RT + f"{r}.csv").sort("rank") for r in ("batters", "bowlers")}
 rob = {r: pl.read_csv(RT + f"robustness_{r}.csv") for r in ("batters", "bowlers")}
-bp = pl.read_parquet("data/processed/ball_pressure.parquet")
+grid = pl.read_csv(T3 + "pressure_grid.csv")  # legal balls, cells with n >= 30 (pressure_model.py)
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "").strip()
+REPO_URL = "https://github.com/dhruvsharma06-web/Rajasthan-Royals"
+
+# share of all win-probability movement carried by high-pressure balls, and swing ratio per innings
+mv = val.with_columns((pl.col("balls") * pl.col("mean_abs_wp_swing")).alias("move"))
+HP_MOVE_SHARE = mv.filter(pl.col("high_pressure"))["move"].sum() / mv["move"].sum()
+HP_BALL_SHARE = mv.filter(pl.col("high_pressure"))["balls"].sum() / mv["balls"].sum()
+sw = (val.group_by("fmt", "innings").agg(
+    (pl.col("mean_abs_wp_swing").filter(pl.col("high_pressure")).first()
+     / pl.col("mean_abs_wp_swing").filter(~pl.col("high_pressure")).first()).alias("ratio")))
+SWING = {i: (sw.filter(pl.col("innings") == i)["ratio"].min(), sw.filter(pl.col("innings") == i)["ratio"].max())
+         for i in (1, 2)}
+
+
+def xrange_(lo, hi):
+    a, b = f"{lo:.1f}", f"{hi:.1f}"
+    return f"about {a}x" if a == b else f"{a}-{b}x"
 INK, ACC, MUTED = "#1f2a44", "#c2185b", "#9aa3b5"
 
 # ---------------------------------------------------------------- figures
 fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
 for ax, inn in zip(axes, (1, 2)):
-    g = (bp.filter(pl.col("is_legal") & (pl.col("innings") == inn))
-         .group_by(["overid", "wkts_before"]).agg(pl.col("high_pressure").mean().alias("v"), pl.len().alias("n"))
-         .filter(pl.col("n") >= 30))
     M = np.full((9, 20), np.nan)
-    for o, w, v, _ in g.iter_rows():
+    for o, w, v in grid.filter(pl.col("innings") == inn).select("overid", "wkts_before", "share_high").iter_rows():
         if w <= 8:
             M[w, o - 1] = v
     im = ax.imshow(M, aspect="auto", origin="lower", cmap="RdPu", vmin=0, vmax=0.8,
@@ -56,12 +70,13 @@ for role in ("batters", "bowlers"):
     fig, ax = plt.subplots(figsize=(7, 4))
     y = np.arange(t.height)
     ax.hlines(y, t["rating_lo"], t["rating_hi"], color=MUTED, lw=4, label="20th-80th percentile")
-    ax.plot(t["rating"], y, "o", color=ACC, label="rating (posterior mean)")
+    ax.plot(t["rating"], y, "o", color=ACC, label="rating (point estimate)")
+    ax.plot(t["rating_lo"], y, "|", color=INK, ms=12, mew=2, label="20th percentile (ranking value)")
     ax.set_yticks(y, t["name"].to_list(), fontsize=8)
     ax.axvline(0, color=INK, lw=0.6)
-    ax.set_xlabel("Pressure rating (0 = average eligible player in the same situations)")
+    ax.set_xlabel("Pressure rating (0 = average player in the same situations)")
     ax.set_title(f"Top 10 {role}: rating and uncertainty", fontsize=10)
-    ax.legend(fontsize=7, loc="lower right", frameon=False)
+    ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=3, frameon=False)
     fig.savefig(OUT + f"fig_top10_{role}.png", dpi=170, bbox_inches="tight")
     plt.close(fig)
 
@@ -93,6 +108,13 @@ def table(headers, rows, widths=None):
         cells = tb.add_row().cells
         for i, x in enumerate(r):
             cells[i].text = str(x)
+    if widths:  # widths in cm; fixed so names do not break mid-word
+        tb.autofit = False
+        for col, w in zip(tb.columns, widths):
+            col.width = Cm(w)
+        for row in tb.rows:
+            for c, w in zip(row.cells, widths):
+                c.width = Cm(w)
     for row in tb.rows:
         for c in row.cells:
             for p in c.paragraphs:
@@ -116,9 +138,9 @@ h("1. Summary")
 bullets([
     "Pressure is defined as stakes: how much the match result can swing on a ball, measured with a win-probability "
     "model. The top 20% of balls by stakes, within each format and innings, are high-pressure balls.",
-    f"The definition separates pressure from ordinary play: high-pressure balls are 20% of balls but carry "
-    f"{0.389:.0%} of all win-probability movement, and in chases each moves the match about 4x as much as an "
-    f"ordinary ball. Only {dec['model_high_share_decided']:.2%} of them come from already-decided matches.",
+    f"The definition separates pressure from ordinary play: high-pressure balls are {HP_BALL_SHARE:.0%} of balls but carry "
+    f"{HP_MOVE_SHARE:.0%} of all win-probability movement, and in chases each moves the match "
+    f"{xrange_(*SWING[2])} as much as an ordinary ball. Only {dec['model_high_share_decided']:.2%} of them come from already-decided matches.",
     "Every ball is credited to the batter and bowler involved, against the average player in the same situation "
     "(format, season, innings, phase, wickets down).",
     f"We tested whether players genuinely rise or fall under pressure. Pressure-minus-usual performance does not "
@@ -160,13 +182,13 @@ para(f"A simple rule-based 'difficulty' index (required-rate gap, wickets lost, 
      f"as a cross-check. It flags already-decided matches {dec['rule_high_share_decided']:.0%} of the time, more "
      f"than the {dec['all_balls_share_decided']:.0%} base rate, against {dec['model_high_share_decided']:.2%} for the "
      "stakes definition: difficulty is not the same as pressure. First-innings pressure is the weaker half of the "
-     "evidence (swing about 1.3x ordinary); a chase-only definition is included as a robustness variant.")
+     f"evidence (swing {xrange_(*SWING[1])} ordinary); a chase-only definition is included as a robustness variant.")
 
 h("3. Measuring performance")
 bullets([
-    "Credit per ball, in win-probability units: the batter receives the effect of the runs he hit; the player "
+    "Credit per ball, in win-probability units: the batter receives the effect of the runs they hit; the player "
     "dismissed (striker or non-striker) is charged the effect of the wicket; the bowler is credited with the ball "
-    "and charged for runs conceded off the bat, wides and no-balls, and credited with wickets he took (not run-outs). "
+    "and charged for runs conceded off the bat, wides and no-balls, and credited with wickets they took (not run-outs). "
     "Byes, leg-byes and retirements are charged to nobody. Built-in checks: no six costs a batter and no wicket "
     "helps the batting side.",
     "Same-situation baseline: each credit is measured against the average credit per unit of stakes in the same "
@@ -175,6 +197,9 @@ bullets([
     "Impact = total credit / total stakes, so a last-over six does not count 20x a six two overs earlier merely "
     "because the stakes were higher; it is performance relative to what was at stake.",
     "Usual level = impact on ordinary balls. Uplift = impact on high-pressure balls minus usual level.",
+    "Reading the numbers: an impact of +0.10 means that, per ball, the player moved the win probability in "
+    "their team's favour by 10% of what was at stake, more than the average player in the same situation "
+    "would have.",
 ])
 h("Rating", 2)
 para("Rating = estimate of each player's true performance on high-pressure balls. High-pressure balls measure it "
@@ -201,30 +226,31 @@ bullets([
 ])
 
 for role, label in (("batters", "Batters"), ("bowlers", "Bowlers")):
-    h(f"5. Evidence for the top 10 {label.lower()}" if role == "batters" else "Evidence for the top 10 bowlers",
-      1 if role == "batters" else 2)
+    if role == "batters":
+        h("5. Evidence for the top 10")
+    h(label, 2)
     a = allp[role].filter(pl.col("rank") <= 10).sort("rank")
     t = a.join(top[role].select("pid", "variants_top10", "variants_eligible"), on="pid")
     if role == "batters":
-        hdr = ["Rank", "Player", "Rating", "P(top10)", "Pressure balls", "Inns", "SR press / ord",
+        hdr = ["#", "Player", "Rating", "P(top 10)", "Pressure balls", "Inns", "SR press / ord",
                "Avg press / ord", "Uplift", "Variants top 10"]
         rows = [(r["rank"], r["name"], f"{r['rating']:.3f}", f2(r["p_top10"]), r["b_hi"], r["hp_inns"],
                  f"{r['sr_hp']:.0f} / {r['sr_ord']:.0f}", f"{r['avg_hp']:.1f} / {r['avg_ord']:.1f}",
                  f"{r['uplift_raw']:+.3f}", f"{r['variants_top10']}/{r['variants_eligible']}") for r in t.iter_rows(named=True)]
     else:
-        hdr = ["Rank", "Player", "Rating", "P(top10)", "Pressure balls", "Inns", "Econ press / ord",
+        hdr = ["#", "Player", "Rating", "P(top 10)", "Pressure balls", "Inns", "Econ press / ord",
                "Balls/wkt press / ord", "Uplift", "Variants top 10"]
         rows = [(r["rank"], r["name"], f"{r['rating']:.3f}", f2(r["p_top10"]), r["b_hi"], r["hp_inns"],
                  f"{r['econ_hp']:.2f} / {r['econ_ord']:.2f}", f"{r['balls_per_wkt_hp']:.0f} / {r['balls_per_wkt_ord']:.0f}",
                  f"{r['uplift_raw']:+.3f}", f"{r['variants_top10']}/{r['variants_eligible']}") for r in t.iter_rows(named=True)]
-    table(hdr, rows)
+    table(hdr, rows, widths=[0.8, 3.6, 1.3, 1.5, 1.5, 1.0, 1.7, 1.7, 1.3, 1.5])
     doc.add_picture(OUT + f"fig_top10_{role}.png", width=Cm(14))
     nxt = allp[role].filter((pl.col("rank") > 10) & (pl.col("rank") <= 15))
     para("Next in order: " + ", ".join(f"{r['rank']}. {r['name']} (P(top10) {r['p_top10']:.2f})"
                                        for r in nxt.iter_rows(named=True)) + ".")
 
 h("6. Reliability and consistency")
-sh = lambda r, k: r["split_half"][k]["r_half"]  # noqa: E731
+sh = lambda r, k: f'{r["split_half"][k]["r_half"]:.3f}'  # noqa: E731
 table(["Measure", "Batters r (odd vs even matches)", "Bowlers r"],
       [("Pressure-ball impact", sh(hb, "pressure_raw"), sh(hw, "pressure_raw")),
        ("All-ball impact", sh(hb, "all_raw"), sh(hw, "all_raw")),
@@ -237,15 +263,25 @@ bullets([
     "Consistency across matches is reported per player: share of pressure matches with positive contribution and "
     "the share of gains coming from the best two matches (in outputs/ratings/*.csv).",
     "Robustness: 15 variants (pressure threshold 10% / 30%; pressure ranked across innings; pressure measured at "
-    "the start of the over, so a batter cannot create his own pressure; 10th / 50th percentile ranking; IPL only; "
+    "the start of the over, so batters cannot create their own pressure; 10th / 50th percentile ranking; IPL only; "
     "T20I only; 2024-2026 only; no lopsided matches; pace/spin-specific baseline; no situation baseline; all balls "
     "with no clutch; pressure balls only; chase pressure only).",
 ])
 
 h("7. Limitations")
+p810 = [x for r in ("batters", "bowlers") for x in allp[r].filter(pl.col("rank").is_between(8, 10))["p_top10"]]
+weak = [f"{r['name']} ({r['variants_top10']}/{r['variants_eligible']})" for role in ("batters", "bowlers")
+        for r in top[role].iter_rows(named=True) if r["variants_top10"] * 2 < r["variants_eligible"]]
 bullets([
-    "Ranks 8-10 in each list are uncertain (P(top10) mostly 0.15-0.30); the order there should be read as "
-    "indicative. The method was fixed before the final lists were read and was not adjusted to favour any name.",
+    f"Ranks 8-10 in each list are uncertain (P(top10) {min(p810):.2f}-{max(p810):.2f}); the order there should be "
+    "read as indicative. The method was fixed before the final lists were read and was not adjusted to favour "
+    "any name.",
+    "Picks that stay in the top 10 in fewer than half of the robustness variants where they are eligible: "
+    + ", ".join(weak) + ". They are kept because the main method was fixed in advance; the players listed "
+    "next in order are the alternatives.",
+    "The ranking value (20th percentile) and P(top10) can disagree: a player with a short record and wide "
+    "uncertainty can have a higher chance of being top 10 yet a lower cautious rank. This is deliberate: "
+    "the brief asks for reliable performers.",
     "Extras run amounts are not in the data; innings totals are estimated (mean error about 2 runs) and chase "
     "targets are back-solved from official results.",
     "The Elo ratings and season par use other matches of the same season, a mild indirect use of later results.",
@@ -256,8 +292,11 @@ bullets([
 h("8. Reproducibility")
 para("Python 3.11; packages pinned in requirements.txt. From the project root, with the supplied data pack in "
      "6af3166e7b922_data_pack/: python -P pipeline/build_state.py; python -P pipeline/pressure_model.py; "
-     "python -P pipeline/ratings.py; python -P pipeline/report.py. Each script runs built-in checks and prints OK. "
-     "Decisions and their evidence are recorded in docs/PROJECT.md.")
+     "python -P pipeline/ratings.py; then python -P pipeline/report.py, pipeline/slides.py (presentation) and "
+     "pipeline/export_dashboard.py (dashboard data). Each script runs built-in checks and prints OK. "
+     "Decisions and their evidence are recorded in docs/PROJECT.md. Code and outputs: " + REPO_URL + ".")
+if DASHBOARD_URL:
+    para("Interactive dashboard (every eligible player, the pressure map and the robustness table): " + DASHBOARD_URL)
 
 doc.save(OUT + "SupeRR_Selector_Methodology.docx")
 print("wrote", OUT + "SupeRR_Selector_Methodology.docx")
