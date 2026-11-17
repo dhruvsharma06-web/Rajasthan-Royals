@@ -18,6 +18,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 OUT = "outputs/report/"
@@ -59,16 +60,46 @@ mc = {(m["model"], m["innings"]): m for m in summ["heldout"]}
 hb, hw = rel["batters"], rel["bowlers"]
 
 # ---------------------------------------------------------------- palette
-NAVY, PINK, INK, MUTED, LINE, BG, GREY = "1F2A44", "C2185B", "15171C", "6B7080", "E4E2DC", "F6F5F2", "8F98AB"
+# dark, cinematic, glass: same tokens as dashboard/style.css
+NAVY, PINK, INK, MUTED, GREY = "8FB6EC", "FF3F8E", "F3F4F8", "9298A8", "7D89A8"
+INK2, DARK = "C9CCD6", "06070B"
+GLASS = "GLASS"  # box(fill=GLASS) draws a translucent panel
 rgb = lambda h: RGBColor.from_string(h)  # noqa: E731
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11, "axes.edgecolor": "#c9c7c0",
-                     "axes.labelcolor": "#4b4f5c", "xtick.color": "#4b4f5c", "ytick.color": "#4b4f5c",
-                     "axes.spines.top": False, "axes.spines.right": False})
+GRIDC, EDGE = (1, 1, 1, 0.08), (1, 1, 1, 0.18)
+plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11, "axes.edgecolor": EDGE,
+                     "axes.labelcolor": "#" + INK2, "xtick.color": "#" + INK2, "ytick.color": "#" + INK2,
+                     "text.color": "#" + INK, "axes.facecolor": (0, 0, 0, 0), "figure.facecolor": (0, 0, 0, 0),
+                     "legend.labelcolor": "#" + INK2, "axes.spines.top": False, "axes.spines.right": False})
+HEAT = matplotlib.colors.LinearSegmentedColormap.from_list("heat", ["#1c1e2a", "#5a2140", "#" + PINK])
 
 
 def save(fig, name):
-    fig.savefig(OUT + name, dpi=200, bbox_inches="tight", facecolor="white")
+    fig.savefig(OUT + name, dpi=200, bbox_inches="tight", transparent=True)
     plt.close(fig)
+    return OUT + name
+
+
+def backdrop(name, strong=False):
+    """Slide background: near-black ground, two floodlight pools, faint ground outline, grain."""
+    from PIL import Image, ImageDraw, ImageFilter
+    W, H = 1920, 1080
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    img = np.zeros((H, W, 3), np.float32) + np.array([6, 7, 11], np.float32)
+    for cx, cy, r, col, a in ((W * 0.92, -H * 0.05, W * 0.55, (255, 63, 142), 0.30 if strong else 0.20),
+                              (-W * 0.05, H * 1.05, W * 0.5, (90, 140, 220), 0.16 if strong else 0.11)):
+        f = np.exp(-(((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * (r / 2.2) ** 2)))[..., None] * a
+        img = img * (1 - f) + np.array(col, np.float32) * f
+    rng = np.random.default_rng(7)
+    img += rng.normal(0, 3.2, img.shape)
+    im = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
+    ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(ov)
+    for rx, ry in ((1250, 300), (640, 150)):
+        d.ellipse((W / 2 - rx, H * 0.86 - ry, W / 2 + rx, H * 0.86 + ry), outline=(255, 255, 255, 16), width=3)
+    d.rectangle((W / 2 - 22, H * 0.86 - 90, W / 2 + 22, H * 0.86 + 90), outline=(255, 255, 255, 14), width=2)
+    ov = ov.filter(ImageFilter.GaussianBlur(0.8))
+    im = Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB")
+    im.save(OUT + name, quality=92)
     return OUT + name
 
 
@@ -80,8 +111,10 @@ def fig_pressure_map():
         for o, w, v in grid.filter(pl.col("innings") == inn).select("overid", "wkts_before", "share_high").iter_rows():
             if w <= 8:
                 M[w, o - 1] = v
-        im = ax.imshow(M, aspect="auto", origin="lower", cmap="RdPu", vmin=0, vmax=0.8, extent=(0.5, 20.5, -0.5, 8.5))
+        im = ax.imshow(M, aspect="auto", origin="lower", cmap=HEAT, vmin=0, vmax=0.8, extent=(0.5, 20.5, -0.5, 8.5))
         ax.set_title("First innings" if inn == 1 else "Chase", fontsize=13, loc="left", color="#" + INK)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
         ax.set_xlabel("Over")
         ax.set_xticks([1, 5, 10, 15, 20])
     axes[0].set_ylabel("Wickets down")
@@ -105,24 +138,24 @@ def fig_swing():
     ax.set_ylabel("Mean win-probability swing per ball (%)")
     ax.set_ylim(0, max(h) * 100 * 1.32)
     ax.legend(frameon=False, loc="upper left", ncol=2)
-    ax.grid(axis="y", color="#ecebe6")
+    ax.grid(axis="y", color=GRIDC)
     ax.set_axisbelow(True)
     return save(fig, "slide_fig_swing.png")
 
 
 def fig_calibration():
     fig, ax = plt.subplots(figsize=(5.6, 4.6))
-    ax.plot([0, 1], [0, 1], color="#c9c7c0", lw=1, label="Perfect calibration")
+    ax.plot([0, 1], [0, 1], color=(1, 1, 1, 0.35), lw=1, label="Perfect calibration")
     for inn, col, lab in ((1, GREY, "First innings"), (2, PINK, "Chase")):
         c = cal.filter(pl.col("innings") == inn).sort("bin")
-        ax.plot(c["predicted"], c["observed"], "-o", color="#" + col, lw=2, ms=6, mec="white", mew=1.5,
+        ax.plot(c["predicted"], c["observed"], "-o", color="#" + col, lw=2, ms=6, mec="#" + DARK, mew=1.5,
                 label=f"{lab} (error {summ['ece'][str(inn)]:.1%})")
     ax.set_xlabel("Predicted win probability")
     ax.set_ylabel("Observed win rate")
     for a in (ax.xaxis, ax.yaxis):
         a.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
     ax.legend(frameon=False, loc="upper left")
-    ax.grid(color="#ecebe6")
+    ax.grid(color=GRIDC)
     ax.set_axisbelow(True)
     return save(fig, "slide_fig_calibration.png")
 
@@ -138,12 +171,12 @@ def fig_split_half():
     ax.barh(y - 0.18, w, 0.34, color="#" + PINK, label="Bowlers")
     for yy, v in list(zip(y + 0.18, b)) + list(zip(y - 0.18, w)):
         ax.text(max(v, 0) + 0.005, yy, f"{v:.3f}", va="center", fontsize=10, color="#" + INK)
-    ax.axvline(0, color="#" + MUTED, lw=1)
+    ax.axvline(0, color=(1, 1, 1, 0.4), lw=1)
     ax.set_yticks(y, [l for _, l in ms])
     ax.set_xlim(-0.05, 0.3)
     ax.set_xlabel("Correlation between odd- and even-numbered matches (r)")
     ax.legend(frameon=False, loc="upper right")
-    ax.grid(axis="x", color="#ecebe6")
+    ax.grid(axis="x", color=GRIDC)
     ax.set_axisbelow(True)
     return save(fig, "slide_fig_split_half.png")
 
@@ -154,14 +187,14 @@ def fig_top10(role):
     y = np.arange(t.height)
     ax.hlines(y, t["rating_lo"], t["rating_hi"], color="#" + GREY, lw=6, alpha=0.6, label="20th-80th percentile")
     ax.plot(t["rating_lo"], y, "|", color="#" + NAVY, ms=16, mew=2.5, label="Ranking value (20th pct)")
-    ax.plot(t["rating"], y, "o", color="#" + PINK, ms=8, mec="white", mew=1.5, label="Rating")
+    ax.plot(t["rating"], y, "o", color="#" + PINK, ms=8, mec="#" + DARK, mew=1.5, label="Rating")
     ax.set_yticks(y, [str(r) for r in t["rank"]], fontsize=11)
     ax.set_ylabel("Rank")
-    ax.axvline(0, color="#" + MUTED, lw=1)
+    ax.axvline(0, color=(1, 1, 1, 0.4), lw=1)
     ax.set_xlabel("Pressure rating\n(0 = average player in the same situations)")
     ax.set_xlim(min(0, t["rating_lo"].min()) - 0.005, t["rating_hi"].max() * 1.05)
     ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=1)
-    ax.grid(axis="x", color="#ecebe6")
+    ax.grid(axis="x", color=GRIDC)
     ax.set_axisbelow(True)
     return save(fig, f"slide_fig_top10_{role}.png")
 
@@ -171,13 +204,13 @@ def fig_robust(role):
     M = np.array([[np.nan if v is None else v for v in r[k].to_list()] for k, _ in VARIANTS]).T
     fig, ax = plt.subplots(figsize=(11.5, 4.3))
     C = np.where(np.isnan(M), 0, np.where(M <= 10, 2, np.where(M <= 20, 1, 0)))
-    cmap = matplotlib.colors.ListedColormap(["#f3f2ee", "#f3c4d7", "#" + PINK])
+    cmap = matplotlib.colors.ListedColormap(["#171924", "#4a2038", "#" + PINK])
     ax.imshow(C, cmap=cmap, vmin=0, vmax=2, aspect="auto")
     for i in range(M.shape[0]):
         for j in range(M.shape[1]):
             v = M[i, j]
             ax.text(j, i, "-" if np.isnan(v) else f"{int(v)}", ha="center", va="center", fontsize=9,
-                    color="white" if C[i, j] == 2 else "#" + INK, fontweight="bold" if C[i, j] == 2 else "normal")
+                    color="white" if C[i, j] else "#" + INK2, fontweight="bold" if C[i, j] == 2 else "normal")
     ax.set_xticks(range(len(VARIANTS)), [l for _, l in VARIANTS], rotation=35, ha="right", fontsize=9)
     ax.set_yticks(range(r.height), [f"{m}. {n}  ({a}/{b})" for m, n, a, b in
                                     zip(r["main"], r["name"], r["variants_top10"], r["variants_eligible"])], fontsize=10)
@@ -186,11 +219,12 @@ def fig_robust(role):
         s.set_visible(False)
     ax.set_xticks(np.arange(-0.5, len(VARIANTS)), minor=True)
     ax.set_yticks(np.arange(-0.5, r.height), minor=True)
-    ax.grid(which="minor", color="white", lw=2)
+    ax.grid(which="minor", color="#" + DARK, lw=2.5)
     return save(fig, f"slide_fig_robust_{role}.png")
 
 
-F = {"map": fig_pressure_map(), "swing": fig_swing(), "cal": fig_calibration(), "sh": fig_split_half(),
+F = {"bg": backdrop("slide_bg.jpg"), "bg_title": backdrop("slide_bg_title.jpg", strong=True),
+     "map": fig_pressure_map(), "swing": fig_swing(), "cal": fig_calibration(), "sh": fig_split_half(),
      "t_bat": fig_top10("batters"), "t_bowl": fig_top10("bowlers"),
      "r_bat": fig_robust("batters"), "r_bowl": fig_robust("bowlers")}
 
@@ -202,19 +236,36 @@ SW, SH = prs.slide_width, prs.slide_height
 FOOT = "SupeRR Selector S2 · Round 1 · Pressure ratings"
 
 
-def box(slide, x, y, w, h, fill=None, line=None, shape=MSO_SHAPE.RECTANGLE):
+def _alpha(parent, a):
+    """Add <a:alpha> to the first srgbClr under parent (a = 0..1 opacity)."""
+    clr = parent.find(".//" + qn("a:srgbClr"))
+    el = clr.makeelement(qn("a:alpha"), {"val": str(int(a * 100000))})
+    clr.append(el)
+
+
+def box(slide, x, y, w, h, fill=None, line=None, shape=None, alpha=None, line_alpha=0.16):
+    """fill=GLASS: translucent white panel with a light edge, rounded. Otherwise a flat colour (optional alpha)."""
+    glass = fill == GLASS
+    if shape is None:
+        shape = MSO_SHAPE.ROUNDED_RECTANGLE if glass else MSO_SHAPE.RECTANGLE
     s = slide.shapes.add_shape(shape, x, y, w, h)
+    if shape == MSO_SHAPE.ROUNDED_RECTANGLE:
+        s.adjustments[0] = min(0.5, Inches(0.22) / min(w, h))
     if fill:
         s.fill.solid()
-        s.fill.fore_color.rgb = rgb(fill)
+        s.fill.fore_color.rgb = rgb("FFFFFF" if glass else fill)
+        if glass or alpha is not None:
+            _alpha(s._element.spPr.find(qn("a:solidFill")), 0.065 if glass else alpha)
     else:
         s.fill.background()
-    if line:
-        s.line.color.rgb = rgb(line)
-        s.line.width = Pt(1)
+    if glass or line:
+        s.line.color.rgb = rgb("FFFFFF" if glass else line)
+        s.line.width = Pt(0.9)
+        _alpha(s._element.spPr.find(qn("a:ln")), line_alpha)
     else:
         s.line.fill.background()
     s.shadow.inherit = False
+    s.text_frame.text = ""
     return s
 
 
@@ -241,9 +292,8 @@ def tb(slide, x, y, w, h, paras, anchor=MSO_ANCHOR.TOP, align=PP_ALIGN.LEFT):
 
 def slide(title, kicker, notes=""):
     s = prs.slides.add_slide(BLANK)
-    box(s, 0, 0, SW, SH, fill="FFFFFF")
-    box(s, 0, 0, Inches(0.16), SH, fill=PINK)
-    tb(s, Inches(0.6), Inches(0.38), Inches(12), Inches(0.35), [(kicker.upper(), 12, True, PINK)])
+    s.shapes.add_picture(F["bg"], 0, 0, width=SW, height=SH)
+    tb(s, Inches(0.6), Inches(0.36), Inches(12), Inches(0.35), [(kicker, 13, True, PINK)])
     tb(s, Inches(0.6), Inches(0.68), Inches(12.2), Inches(0.9), [(title, 28, True, INK)])
     tb(s, Inches(0.6), Inches(7.02), Inches(8), Inches(0.3), [(FOOT, 10, False, MUTED)])
     tb(s, Inches(11.7), Inches(7.02), Inches(1.1), Inches(0.3), [(str(len(prs.slides)), 10, False, MUTED)], align=PP_ALIGN.RIGHT)
@@ -257,7 +307,7 @@ def pic(s, path, x, y, w=None, h=None):
 
 
 def stat(s, x, y, w, value, label, color=PINK):
-    box(s, x, y, w, Inches(1.25), fill=BG)
+    box(s, x, y, w, Inches(1.25), fill=GLASS)
     tb(s, x + Inches(0.18), y + Inches(0.1), w - Inches(0.3), Inches(0.55), [(value, 26, True, color)])
     tb(s, x + Inches(0.18), y + Inches(0.66), w - Inches(0.3), Inches(0.55), [(label, 11.5, False, INK)])
 
@@ -265,6 +315,7 @@ def stat(s, x, y, w, value, label, color=PINK):
 def table(s, x, y, w, headers, rows, widths, row_h=0.36, font=11, hi_rows=()):
     shp = s.shapes.add_table(len(rows) + 1, len(headers), x, y, w, Inches(row_h * (len(rows) + 1)))
     t = shp.table
+    t._tbl.tblPr.find(qn("a:tableStyleId")).text = "{2D5ABB26-0587-4C30-8999-92F81FD0307C}"  # No Style, No Grid
     tot = sum(widths)
     for j, wd in enumerate(widths):
         t.columns[j].width = Emu(int(w * wd / tot))
@@ -277,31 +328,33 @@ def table(s, x, y, w, headers, rows, widths, row_h=0.36, font=11, hi_rows=()):
             c.margin_top = c.margin_bottom = Inches(0.02)
             c.vertical_anchor = MSO_ANCHOR.MIDDLE
             c.fill.solid()
-            c.fill.fore_color.rgb = rgb(NAVY if i == 0 else ("FBE9F0" if i - 1 in hi_rows else ("FFFFFF" if i % 2 else BG)))
+            hi = i > 0 and i - 1 in hi_rows
+            c.fill.fore_color.rgb = rgb(PINK if hi else "FFFFFF")
+            _alpha(c._tc.get_or_add_tcPr(), 0.22 if hi else (0.13 if i == 0 else (0.06 if i % 2 else 0.025)))
             for p in c.text_frame.paragraphs:
                 p.alignment = PP_ALIGN.LEFT if j == 1 else PP_ALIGN.CENTER
                 for r in p.runs:
                     r.font.size, r.font.name = Pt(font), "Calibri"
                     r.font.bold = i == 0 or j == 1
-                    r.font.color.rgb = rgb("FFFFFF" if i == 0 else INK)
+                    r.font.color.rgb = rgb(INK)
     return t
 
 
 # ---------------------------------------------------------------- slides
 # 1 title
 s = prs.slides.add_slide(BLANK)
-box(s, 0, 0, SW, SH, fill=NAVY)
-box(s, 0, Inches(6.9), SW, Inches(0.6), fill=PINK)
+s.shapes.add_picture(F["bg_title"], 0, 0, width=SW, height=SH)
+box(s, Inches(0.6), Inches(6.55), Inches(12.13), Inches(0.62), fill=GLASS)
 tb(s, Inches(0.8), Inches(1.0), Inches(11), Inches(0.4),
-   [("RAJASTHAN ROYALS · SUPERR SELECTOR SEASON 2 · ROUND 1", 14, True, "F48FB8")])
-tb(s, Inches(0.8), Inches(1.6), Inches(11.5), Inches(2.4), [("Who delivers when the match is on the line?", 48, True, "FFFFFF")])
+   [("SupeRR Selector Season 2 · Round 1", 16, True, PINK)])
+tb(s, Inches(0.8), Inches(1.6), Inches(11.5), Inches(2.4), [("Who delivers under pressure?", 60, True, "FFFFFF")])
 tb(s, Inches(0.8), Inches(3.75), Inches(11), Inches(1.2),
    [(f"A pressure rating for IPL and T20I batters and bowlers, built from {summ['scope_balls']:,} deliveries "
      f"in {summ['scope_matches']} matches ({summ['years'][0]}-{summ['years'][-1]}).", 20, False, "C9CDD8")])
 tb(s, Inches(0.8), Inches(5.2), Inches(11), Inches(0.9),
    [("Pressure defined as stakes · credit against the same situation · clutch tested, not assumed · "
      "cautious ranking · 15 robustness checks", 15, False, "FFFFFF")])
-tb(s, Inches(0.8), Inches(6.98), Inches(11), Inches(0.45), [("Methodology summary and final top-10 lists", 14, True, "FFFFFF")],
+tb(s, Inches(0.85), Inches(6.55), Inches(11), Inches(0.62), [("Methodology summary and final top-10 lists", 14, True, "FFFFFF")],
    anchor=MSO_ANCHOR.MIDDLE)
 s.notes_slide.notes_text_frame.text = ("Our entry for Round 1: two ordered top-10 lists of the most reliable performers under "
                                        "pressure, and the evidence behind them. Every number comes from the supplied data pack.")
@@ -319,11 +372,11 @@ steps = [("1", "Define pressure", "A win-probability model gives every ball its 
           "bootstraps. Re-test every pick 15 ways.")]
 for i, (n, h, d) in enumerate(steps):
     x = Inches(0.6 + i * 3.1)
-    box(s, x, Inches(1.85), Inches(2.85), Inches(3.75), fill=BG)
+    box(s, x, Inches(1.85), Inches(2.85), Inches(3.75), fill=GLASS)
     tb(s, x + Inches(0.25), Inches(2.05), Inches(1), Inches(0.8), [(n, 40, True, PINK)])
     tb(s, x + Inches(0.25), Inches(2.95), Inches(2.4), Inches(0.6), [(h, 18, True, INK)])
-    tb(s, x + Inches(0.25), Inches(3.6), Inches(2.4), Inches(1.9), [(d, 13.5, False, "4B4F5C")])
-box(s, Inches(0.6), Inches(5.85), Inches(12.15), Inches(0.85), fill=NAVY)
+    tb(s, x + Inches(0.25), Inches(3.6), Inches(2.4), Inches(1.9), [(d, 13.5, False, INK2)])
+box(s, Inches(0.6), Inches(5.85), Inches(12.15), Inches(0.85), fill=PINK, alpha=0.2, line=PINK, shape=MSO_SHAPE.ROUNDED_RECTANGLE, line_alpha=0.45)
 tb(s, Inches(0.85), Inches(5.85), Inches(11.7), Inches(0.85),
    [("Why win probability? Runs and wickets, batting and bowling, IPL and T20I all land on one scale: "
      "the chance of winning the match.", 15, True, "FFFFFF")], anchor=MSO_ANCHOR.MIDDLE)
@@ -334,7 +387,7 @@ s = slide("Pressure = what is at stake on this ball", "1 · Defining pressure",
 tb(s, Inches(0.6), Inches(1.6), Inches(12.2), Inches(1.0),
    [("Stakes (leverage) = expected absolute change in the batting side's win probability over the usual mix of outcomes "
      "(dot, 1, 2, 4, 6, wicket). A ball is high pressure if its stakes are in the top 20% of its format and innings.",
-     14, False, "4B4F5C")])
+     14, False, INK2)])
 pic(s, F["map"], Inches(0.6), Inches(2.55), w=Inches(9.0))
 tb(s, Inches(9.85), Inches(2.75), Inches(3.0), Inches(4.0),
    [("Chase", 15, True, PINK), ("Peaks in overs 11-20 of a close chase with 3-6 wickets down; vanishes once a chase is decided.", 12.5, False, INK),
@@ -370,7 +423,7 @@ pts = [("Credit per ball", "Batter: the win-probability effect of the runs they 
         "(the brief's 'compared with their usual performance').")]
 for i, (h, d) in enumerate(pts):
     x, y = Inches(0.6 + (i % 2) * 6.2), Inches(1.75 + (i // 2) * 2.55)
-    box(s, x, y, Inches(5.95), Inches(2.3), fill=BG)
+    box(s, x, y, Inches(5.95), Inches(2.3), fill=GLASS)
     tb(s, x + Inches(0.3), y + Inches(0.2), Inches(5.4), Inches(0.5), [(h, 18, True, PINK)])
     tb(s, x + Inches(0.3), y + Inches(0.75), Inches(5.4), Inches(1.5), [(d, 14, False, INK)])
 
@@ -446,11 +499,11 @@ for role in ("batters", "bowlers"):
     full = int((t["variants_top10"] == t["variants_eligible"]).sum())
     most = int((t["variants_top10"] * 2 >= t["variants_eligible"]).sum())
     s = slide(f"Robustness: the top 10 {role} under 15 alternative methods", "Evidence",
-              "Each column changes one modelling choice. Filled = top 10 in that variant; light = 11-20; dash = not eligible.")
+              "Each column changes one modelling choice. Bright pink = top 10 in that variant; dim pink = 11-20; dash = not eligible.")
     pic(s, F["r_bat" if role == "batters" else "r_bowl"], Inches(0.6), Inches(1.6), w=Inches(12.1))
     tb(s, Inches(0.6), Inches(6.35), Inches(12.2), Inches(0.6),
        [(f"{most} of 10 stay in the top 10 in at least half of the variants where they are eligible; {full} in every one. "
-         "Filled = top 10, light = 11-20, dash = not eligible in that variant.", 12.5, False, INK)])
+         "Bright pink = top 10, dim pink = 11-20, dash = not eligible in that variant.", 12.5, False, INK)])
 
 # 12 limitations
 p810 = [x for r in ("batters", "bowlers") for x in allp[r].filter(pl.col("rank").is_between(8, 10))["p_top10"]]

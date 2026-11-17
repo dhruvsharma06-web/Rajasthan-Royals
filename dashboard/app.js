@@ -72,13 +72,11 @@
     $("#k-matches").textContent = nf.format(m.matches);
     $("#k-years").textContent = `${m.years[0]}–${m.years[m.years.length - 1]}`;
     const k = [
-      [pct(m.hp_move_share), `of all win-probability movement happens on the ${pct(m.hp_ball_share)} of balls rated high pressure`],
-      [pct(m.decided.model_high_share_decided, 2), `of high-pressure balls come from already-decided matches (base rate ${pct(m.decided.all_balls_share_decided)})`],
-      [String(D.reliability.batters.eligible), "eligible batters, each with 90+ high-pressure balls in 12+ innings"],
-      [String(D.reliability.bowlers.eligible), "eligible bowlers, same thresholds"],
-      [String(D.variants.length), "alternative methods each pick is re-tested against"],
+      [pct(m.hp_move_share), `of all the swing in win probability happens on the ${pct(m.hp_ball_share)} of balls rated high pressure`],
+      [pct(m.decided.model_high_share_decided, 2), `of high-pressure balls come from matches already decided, against a ${pct(m.decided.all_balls_share_decided)} base rate`],
+      [`${D.reliability.batters.eligible} + ${D.reliability.bowlers.eligible}`, `eligible batters and bowlers, each re-ranked under ${D.variants.length} alternative methods`],
     ];
-    $("#kpis").innerHTML = k.map(([v, l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+    $("#kpis").innerHTML = k.map(([v, l]) => `<div><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
     const a = $("#repo-link");
     a.href = m.repo;
     a.textContent = m.repo.replace("https://", "");
@@ -93,7 +91,7 @@
     const x = lin(lo, hi * 1.04, labW, W - padR);
     const s = svg($("#rate-chart"), W, H);
     s.setAttribute("aria-label", `Top 10 ${state.role}: rating with 20th to 80th percentile range`);
-    const ticks = niceTicks(lo, hi, 5);
+    const ticks = niceTicks(lo, hi, W < 480 ? 3 : 5);
     ticks.forEach((t) => {
       el("line", { x1: x(t), x2: x(t), y1: padT, y2: H - padB, class: t === 0 ? "zero" : "gridline" }, s);
       text(s, x(t), H - padB + 18, t.toFixed(2), { "text-anchor": "middle" });
@@ -208,9 +206,12 @@
   }
 
   // ---------- heatmaps
+  let heroDrawn = false;
   function heat(container, inn) {
     const g = D.grid.filter((r) => r.innings === inn);
-    const W = cw("#" + container.id), H = Math.round(Math.min(340, Math.max(220, W * 0.58))), pl = 34, pb = 34, pt = 6, pr = 6;
+    const hero = container.id === "heat-hero", animate = hero && !heroDrawn;
+    if (hero) heroDrawn = true;
+    const W = cw("#" + container.id), H = Math.round(Math.min(hero ? 460 : 340, Math.max(220, W * (hero ? 0.6 : 0.58)))), pl = 34, pb = 34, pt = 6, pr = 6;
     const cellW = (W - pl - pr) / 20, ch = (H - pt - pb) / 9;
     const s = svg(container, W, H);
     s.setAttribute("aria-label", `${inn === 1 ? "First innings" : "Chase"}: share of high-pressure balls by over and wickets down`);
@@ -223,9 +224,11 @@
       if (r.wkts_before > 8) return;
       const k = Math.min(1, r.share_high / 0.8);
       const c = el("rect", {
-        x: pl + cellW * (r.overid - 1) + 1, y: H - pb - ch * (r.wkts_before + 1) + 1, width: cellW - 2, height: ch - 2, rx: 3,
-        style: `fill: color-mix(in oklab, var(--accent) ${Math.round(6 + k * 94)}%, var(--heat-base))`,
+        x: pl + cellW * (r.overid - 1) + 1.5, y: H - pb - ch * (r.wkts_before + 1) + 1.5, width: cellW - 3, height: ch - 3, rx: hero ? 4 : 3,
+        style: `fill: color-mix(in oklab, var(--accent) ${Math.round(4 + k * 96)}%, var(--heat-base))` +
+          (animate ? `; animation-delay: ${(0.45 + r.overid * 0.045 + r.wkts_before * 0.012).toFixed(3)}s` : ""),
       }, s);
+      if (animate) c.classList.add("cell-in");
       hover(c, `<b>Over ${r.overid}, ${r.wkts_before} down</b><br>${pct(r.share_high)} of balls high pressure<br>${nf.format(r.n)} balls`);
     });
   }
@@ -390,15 +393,24 @@
   header();
   document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setRole(b.dataset.role)));
   $("#search").addEventListener("input", (e) => { state.q = e.target.value; table(); });
-  heat($("#heat-1"), 1); heat($("#heat-2"), 2); heatScale();
+  heat($("#heat-hero"), 2); heat($("#heat-1"), 1); heatScale();
   swing(); decided(); calibration(); splitHalf();
   setRole("batters");
   addEventListener("scroll", hideTip, { passive: true });
+  // scroll reveals: once, ~15% visible, small stagger between siblings
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((es) => es.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { threshold: 0.12 }) : null;
+  document.querySelectorAll(".reveal").forEach((n) => {
+    const sib = [...n.parentElement.children].filter((x) => x.classList.contains("reveal"));
+    n.style.setProperty("--d", `${Math.min(3, sib.indexOf(n)) * 0.08}s`);
+    if (io) io.observe(n); else n.classList.add("in");
+  });
   let lastW = innerWidth, rt = 0;
   addEventListener("resize", () => {
     if (innerWidth === lastW) return;
     lastW = innerWidth;
     clearTimeout(rt);
-    rt = setTimeout(() => { rateChart(); heat($("#heat-1"), 1); heat($("#heat-2"), 2); swing(); decided(); calibration(); splitHalf(); }, 150);
+    rt = setTimeout(() => { rateChart(); heat($("#heat-hero"), 2); heat($("#heat-1"), 1); swing(); decided(); calibration(); splitHalf(); }, 150);
   });
 })();
