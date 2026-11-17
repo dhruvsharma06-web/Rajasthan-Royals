@@ -31,9 +31,9 @@
       <a href="#top10">Top 10</a><a href="#players">Players</a><a href="#pressure">Pressure</a>
       <a href="#clutch">Clutch</a><a href="#robust">Robustness</a>
     </nav>
-    <div class="seg" role="tablist" aria-label="Role">
-      <button role="tab" data-role="batters" aria-selected="true">Batters</button>
-      <button role="tab" data-role="bowlers" aria-selected="false">Bowlers</button>
+    <div class="seg" role="group" aria-label="Role">
+      <button type="button" data-role="batters" aria-pressed="true">Batters</button>
+      <button type="button" data-role="bowlers" aria-pressed="false">Bowlers</button>
     </div>
   </div>
 </header>
@@ -84,7 +84,7 @@
     <div class="glass panel reveal">
       <div class="table-tools">
         <input id="search" type="search" placeholder="Search a player" aria-label="Search a player">
-        <span id="count" class="muted"></span>
+        <span id="count" class="muted" aria-live="polite"></span>
       </div>
       <div class="scroll"><table id="ptable" class="data"></table></div>
     </div>

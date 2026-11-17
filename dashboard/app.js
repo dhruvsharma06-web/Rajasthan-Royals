@@ -59,6 +59,7 @@
     node.addEventListener("mouseenter", (e) => showTip(typeof html === "function" ? html() : html, e));
     node.addEventListener("mousemove", moveTip);
     node.addEventListener("mouseleave", hideTip);
+    node.addEventListener("click", (e) => showTip(typeof html === "function" ? html() : html, e));
   }
 
   const players = () => D[state.role];
@@ -96,10 +97,10 @@
       el("line", { x1: x(t), x2: x(t), y1: padT, y2: H - padB, class: t === 0 ? "zero" : "gridline" }, s);
       text(s, x(t), H - padB + 18, t.toFixed(2), { "text-anchor": "middle" });
     });
-    text(s, (labW + W - padR) / 2, H - 4, "Pressure rating", { "text-anchor": "middle", fill: "var(--muted)" });
+    text(s, (labW + W - padR) / 2, H - 1, "Pressure rating", { "text-anchor": "middle", fill: "var(--muted)" });
     top.forEach((p, i) => {
       const cy = padT + rowH * i + rowH / 2;
-      const g = el("g", { class: "row-hit" + (state.sel[state.role] === p.pid ? " sel" : ""), tabindex: 0, role: "button", "aria-label": `${p.rank}. ${p.name}` }, s);
+      const g = el("g", { class: "row-hit" + (state.sel[state.role] === p.pid ? " sel" : ""), tabindex: 0, role: "button", "data-pid": p.pid, "aria-pressed": String(state.sel[state.role] === p.pid), "aria-label": `${p.rank}. ${p.name}` }, s);
       el("rect", { x: 0, y: cy - rowH / 2 + 1, width: W, height: rowH - 2, rx: 8, class: "row-bg", fill: "transparent" }, g);
       text(g, 8, cy + 4, String(p.rank), { fill: "var(--muted)", "font-weight": 700 });
       text(g, 30, cy + 4, p.name, { class: "nm", "font-size": W < 480 ? 11.5 : 12.5 });
@@ -108,9 +109,9 @@
       el("circle", { cx: x(p.rating), cy, r: 5.5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }, g);
       text(g, W - 4, cy + 4, `${Math.round(p.p_top10 * 100)}%`, { fill: "var(--ink-2)", "text-anchor": "end" });
       hover(g, () => `<b>${esc(p.name)}</b><br>Rating ${sgn(p.rating)}<br>Ranking value (20th pct) ${sgn(p.rating_lo)}<br>80th pct ${sgn(p.rating_hi)}<br>Chance of being top 10: ${pct(p.p_top10)}`);
-      const pick = () => select(p.pid);
+      const pick = (e) => select(p.pid, e && e.type === "keydown");
       g.addEventListener("click", pick);
-      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
     });
     text(s, W - 4, 12, "P(top 10)", { fill: "var(--muted)", "font-size": 10, "text-anchor": "end" });
     $("#rate-legend").innerHTML =
@@ -190,18 +191,19 @@
       return dir * ((x ?? -Infinity) - (y ?? -Infinity)) || a.rank - b.rank;
     });
     const t = $("#ptable");
-    t.innerHTML = `<thead><tr>${c.map(([k, l]) => `<th class="sortable" data-k="${k}"${k === key ? ` aria-sort="${dir > 0 ? "ascending" : "descending"}"` : ""}>${l}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map((p) => `<tr data-pid="${p.pid}" class="${p.rank <= 10 ? "top" : ""}">${c.map(([, , fn]) => `<td>${fn(p)}</td>`).join("")}</tr>`).join("")}</tbody>`;
-    t.querySelectorAll("th").forEach((th) => th.addEventListener("click", () => {
+    t.innerHTML = `<thead><tr>${c.map(([k, l]) => `<th class="sortable" data-k="${k}"${k === key ? ` aria-sort="${dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" class="th-btn">${l}</button></th>`).join("")}</tr></thead>
+      <tbody>${rows.length ? rows.map((p) => `<tr data-pid="${p.pid}" class="${p.rank <= 10 ? "top" : ""}">${c.map(([, , fn], i) => `<td>${i === 1 ? `<button type="button" class="link">${fn(p)}</button>` : fn(p)}</td>`).join("")}</tr>`).join("")
+        : `<tr class="empty"><td colspan="${c.length}">No player matches “${esc(state.q)}”. <button type="button" class="link" id="clear-q">Clear search</button></td></tr>`}</tbody>`;
+    const cq = $("#clear-q");
+    if (cq) cq.addEventListener("click", () => { state.q = ""; $("#search").value = ""; table(); $("#search").focus(); });
+    t.querySelectorAll("th").forEach((th) => th.querySelector("button").addEventListener("click", () => {
       const k = th.dataset.k;
       if (state.sort.key === k) state.sort.dir *= -1;
       else state.sort = { key: k, dir: k === "rank" || k === "name" ? 1 : -1 };
       table();
+      t.querySelector(`th[data-k="${k}"] button`).focus();
     }));
-    t.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => {
-      select(+tr.dataset.pid);
-      document.getElementById("top10").scrollIntoView();
-    }));
+    t.querySelectorAll("tbody tr[data-pid]").forEach((tr) => tr.addEventListener("click", () => openPlayer(+tr.dataset.pid)));
     $("#count").textContent = `${rows.length} of ${players().length} players`;
   }
 
@@ -301,7 +303,7 @@
     const x = lin(0, 1, pl, W - pr), y = lin(0, 1, H - pb, pt);
     [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
       el("line", { x1: pl, x2: W - pr, y1: y(t), y2: y(t), class: "gridline" }, s);
-      text(s, pl - 6, y(t) + 4, pct(t), { "text-anchor": "end" });
+      if (t > 0) text(s, pl - 6, y(t) + 4, pct(t), { "text-anchor": "end" });
       text(s, x(t), H - pb + 16, pct(t), { "text-anchor": "middle" });
     });
     text(s, (pl + W - pr) / 2, H - 2, "Predicted win probability", { "text-anchor": "middle", fill: "var(--muted)" });
@@ -364,28 +366,33 @@
     const top = players().slice(0, 15);
     const t = $("#rtable");
     t.innerHTML = `<thead><tr><th>Main</th><th>Player</th>${D.variants.map((v) => `<th>${esc(v.label)}</th>`).join("")}<th>Top 10 in</th></tr></thead>
-      <tbody>${top.map((p) => `<tr data-pid="${p.pid}"><td class="c">${p.rank}</td><td>${esc(p.name)}</td>${D.variants.map((v) => {
+      <tbody>${top.map((p) => `<tr data-pid="${p.pid}"><td class="c">${p.rank}</td><td><button type="button" class="link">${esc(p.name)}</button></td>${D.variants.map((v) => {
         const r = p[v.key];
         return `<td class="c ${r == null ? "na" : r <= 10 ? "t10" : r <= 20 ? "t20" : ""}">${r == null ? "–" : r}</td>`;
       }).join("")}<td class="sum">${p.variants_top10}/${p.variants_eligible}</td></tr>`).join("")}</tbody>`;
-    t.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => {
-      select(+tr.dataset.pid);
-      document.getElementById("top10").scrollIntoView();
-    }));
+    t.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => openPlayer(+tr.dataset.pid)));
   }
 
   // ---------- wiring
-  function select(pid) {
+  function select(pid, fromKey) {
     state.sel[state.role] = pid;
     rateChart();
     detail();
+    if (fromKey) { const g = document.querySelector(`#rate-chart [data-pid="${pid}"]`); if (g) g.focus(); }
+  }
+  function openPlayer(pid) {
+    select(pid);
+    const d = $("#detail");
+    d.setAttribute("tabindex", "-1");
+    d.scrollIntoView({ block: "start" });
+    d.focus({ preventScroll: true });
   }
   function setRole(role) {
     state.role = role;
-    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.role === role)));
+    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.role === role)));
     document.querySelectorAll(".role-name").forEach((n) => (n.textContent = role));
     const e = D.meta.eligibility[role === "batters" ? "bat" : "bowl"];
-    $("#elig-note").textContent = `${players().length} ${role} with at least ${e.hp_balls} high-pressure balls across at least ${e.hp_inns} innings, and 60 ordinary balls. Click a column to sort, a row to open the player.`;
+    $("#elig-note").textContent = `${players().length} ${role} with at least ${e.hp_balls} high-pressure balls across at least ${e.hp_inns} innings, and 60 ordinary balls. Sort by any column; pick a player to open their evidence.`;
     if (state.sort.key.endsWith("_hp") || state.sort.key.endsWith("_ord")) state.sort = { key: "rank", dir: 1 };
     rateChart(); detail(); table(); robust();
   }

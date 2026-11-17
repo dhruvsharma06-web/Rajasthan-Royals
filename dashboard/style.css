@@ -6,11 +6,12 @@
   --heat-base: #1c1e2a;        /* lowest heat cell */
   --ink: #f3f4f8;
   --ink-2: rgba(243, 244, 248, .78);
-  --muted: rgba(243, 244, 248, .52);
+  --muted: rgba(243, 244, 248, .64);
   --line: rgba(255, 255, 255, .09);
   --grid: rgba(255, 255, 255, .07);
   --accent: #ff3f8e;
   --accent-ink: #ff86b6;
+  --accent-fill: #d61f6c;      /* pink behind white text: 4.9:1 */
   --navy: #8fb6ec;             /* second series (batters in the clutch chart, ranking tick) */
   --series-2: #7d89a8;         /* ordinary / comparison series */
   --glass-fill: linear-gradient(180deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .03));
@@ -73,7 +74,7 @@ h3 { font-size: 1.06rem; letter-spacing: -.01em; margin-bottom: 4px; }
   padding: 7px 16px; border-radius: 999px; cursor: pointer; transition: background .25s var(--ease), color .25s;
 }
 .seg button:hover { color: var(--ink); }
-.seg button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.seg button[aria-pressed="true"] { background: var(--accent-fill); color: #fff; }
 
 /* ---------- hero */
 .hero { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(28px, 4vw, 64px); align-items: center; min-height: min(86vh, 860px); padding-block: clamp(40px, 7vh, 88px) 40px; }
@@ -84,7 +85,7 @@ h3 { font-size: 1.06rem; letter-spacing: -.01em; margin-bottom: 4px; }
   display: inline-flex; align-items: center; gap: 10px; border-radius: 999px; padding: 13px 26px; font-weight: 600;
   font-size: .98rem; text-decoration: none; transition: transform .2s var(--ease), background .2s;
 }
-.btn { background: var(--accent); color: #fff; }
+.btn { background: var(--accent-fill); color: #fff; }
 .btn span { transition: transform .2s var(--ease); }
 .btn:hover span { transform: translateX(3px); }
 .btn-ghost { color: var(--ink); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); }
@@ -134,6 +135,7 @@ h3 { font-size: 1.06rem; letter-spacing: -.01em; margin-bottom: 4px; }
 .row-hit:hover .row-bg, .row-hit:focus-visible .row-bg { fill: rgba(255, 255, 255, .05); }
 .row-hit.sel .row-bg { fill: rgba(255, 63, 142, .13); }
 .row-hit:focus { outline: none; }
+.row-hit:focus-visible .row-bg { fill: rgba(255, 63, 142, .13); stroke: var(--accent); stroke-width: 2; }
 .row-hit .nm { fill: var(--ink); font-size: 12.5px; }
 .row-hit.sel .nm { font-weight: 700; }
 .heat-scale { display: flex; align-items: center; gap: 10px; font-size: .82rem; color: var(--muted); margin-top: 12px; }
@@ -164,7 +166,7 @@ h3 { font-size: 1.06rem; letter-spacing: -.01em; margin-bottom: 4px; }
   aspect-ratio: 1; border-radius: 6px; display: grid; place-items: center; font-size: 10.5px; font-weight: 600;
   color: var(--ink-2); background: rgba(255, 255, 255, .06);
 }
-.strip div.t10 { background: var(--accent); color: #fff; }
+.strip div.t10 { background: var(--accent-fill); color: #fff; }
 .strip div.t20 { background: rgba(255, 63, 142, .24); color: var(--ink); }
 .strip div.na { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
 .flag { margin-top: 12px; font-size: .88rem; color: var(--ink); padding: 10px 14px; background: rgba(255, 63, 142, .12); border-radius: 12px; }
@@ -192,13 +194,13 @@ table.data th:nth-child(2), table.data td:nth-child(2) { text-align: left; }
 table.data tbody tr { cursor: pointer; transition: background .15s; }
 table.data tbody tr:hover { background: rgba(255, 255, 255, .04); }
 table.data tr.top td:nth-child(2) { font-weight: 650; }
-.badge { display: inline-block; font-size: .7rem; font-weight: 700; color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 7px; margin-left: 8px; vertical-align: 1px; }
+.badge { display: inline-block; font-size: .7rem; font-weight: 700; color: #fff; background: var(--accent-fill); border-radius: 999px; padding: 1px 7px; margin-left: 8px; vertical-align: 1px; }
 .minibar { display: inline-block; height: 5px; border-radius: 3px; background: var(--accent); vertical-align: middle; margin-left: 8px; }
 table.rob td, table.rob th { text-align: center; padding: 8px 4px; }
 table.rob th { font-size: .72rem; white-space: normal; min-width: 58px; vertical-align: bottom; line-height: 1.25; }
 table.rob th:nth-child(2), table.rob td:nth-child(2) { text-align: left; min-width: 160px; }
 table.rob td.c { font-weight: 600; }
-table.rob td.t10 { background: rgba(255, 63, 142, .62); color: #fff; }
+table.rob td.t10 { background: var(--accent-fill); color: #fff; }
 table.rob td.t20 { background: rgba(255, 63, 142, .14); }
 table.rob td.na { color: var(--muted); }
 table.rob td.sum { font-weight: 700; }
@@ -227,7 +229,9 @@ table.rob td.sum { font-weight: 700; }
   .hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
   .hero h1 { max-width: 12ch; }
   .grid-2, .grid-2.even { grid-template-columns: minmax(0, 1fr); }
-  .links { display: none; }
+  html { scroll-padding-top: 120px; }
+  .nav-inner { flex-wrap: wrap; row-gap: 4px; }
+  .links { display: flex; order: 3; width: 100%; margin-left: 0; overflow-x: auto; gap: 18px; padding-bottom: 10px; white-space: nowrap; }
   .seg { margin-left: auto; }
 }
 @media (max-width: 640px) {
@@ -239,3 +243,15 @@ table.rob td.sum { font-weight: 700; }
   .mark span { display: none; }
   .glass, .glass-bar { -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 }
+
+/* table controls: real buttons, styled as plain text */
+.th-btn, button.link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+.th-btn { font-weight: 600; }
+button.link:hover { color: var(--accent-ink); }
+tr.empty td { text-align: left !important; color: var(--ink-2); padding: 18px 8px; }
+tr.empty button.link { color: var(--accent-ink); text-decoration: underline; }
+#detail:focus { outline: none; }
+/* robustness table: rank and player columns stay put while scrolling sideways */
+table.rob th:nth-child(-n+2), table.rob td:nth-child(-n+2) { position: sticky; z-index: 2; background: #151722; }
+table.rob th:nth-child(1), table.rob td:nth-child(1) { left: 0; min-width: 48px; width: 48px; }
+table.rob th:nth-child(2), table.rob td:nth-child(2) { left: 48px; }
